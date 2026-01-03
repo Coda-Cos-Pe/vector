@@ -1,0 +1,86 @@
+
+if exists(.tmp.ips_to_enrich) {
+	items_to_process = array!(.tmp.ips_to_enrich)
+	for_each(items_to_process) -> |_index, value| {
+   		item, err  = object(value)
+ 
+	    if err == null {
+	        ip_to_enrich = item.ip
+	        target_key = item.target
+        
+	        enriched_data = {} 
+	        
+	        city_data, err_city = get_enrichment_table_record("geoip_city_db", {"ip": ip_to_enrich})
+	        if err_city == null {
+
+            	# 1. City (Cidade)
+            	if exists(city_data.city.names.en) {
+            	    city_data.city = city_data.city.names.en
+            	} else if exists(city_data.city.names."pt-BR") {
+            	    city_data.city = city_data.city.names."pt-BR"
+            	}
+
+            	# 2. Country (País)
+            	if exists(city_data.country.names.en) {
+            	    city_data.country = city_data.country.names.en
+            	} else if exists(city_data.country.names."pt-BR") {
+            	    city_data.country = city_data.country.names."pt-BR"
+            	}
+
+            	# 3. Registered Country (País de Registro - O SEU PROBLEMA)
+            	if exists(city_data.registered_country.names.en) {
+            	    city_data.registered_country = city_data.registered_country.names.en
+            	} else if exists(city_data.registered_country.names."pt-BR") {
+            	    city_data.registered_country = city_data.registered_country.names."pt-BR"
+            	}
+
+            	# 4. Continent (Continente)
+            	if exists(city_data.continent.names.en) {
+            	    city_data.continent = city_data.continent.names.en
+            	} else if exists(city_data.continent.names."pt-BR") {
+            	    city_data.continent = city_data.continent.names."pt-BR"
+            	}
+
+				# --- 5. Subdivisions (Estados/Províncias) - NOVO BLOCO ---
+                if exists(city_data.subdivisions) {
+                    # Pega a primeira subdivisão (o estado principal)
+                    sub = city_data.subdivisions[0]
+
+                    if sub != null {
+                        # Extrai e achata os dados para a raiz do objeto
+                        city_data.subdivisions_iso = sub.iso_code
+                        city_data.subdivisions_id = sub.geoname_id
+                        
+            			if exists(sub.names.en) {
+            	    		city_data.subdivisions_name = sub.names.en
+            			} else if exists(sub.names."pt-BR") {
+            	    		city_data.subdivisions_name = sub.names."pt-BR"
+            			}
+                    }
+                    
+                    # Remove o array original complexo para limpar o log
+                    del(city_data.subdivisions)
+                }
+
+	            enriched_data.geoip = city_data
+	        }
+	
+	        asn_data, err_asn = get_enrichment_table_record("geoip_asn_db", {"ip": ip_to_enrich})
+	        if err_asn == null {
+	            enriched_data.asn = asn_data
+	        }
+	        
+	        temp_obj_to_merge = {}
+	        temp_obj_to_merge, err = set(temp_obj_to_merge, [target_key], enriched_data)
+	        
+	        if err == null {
+	            . = merge(., temp_obj_to_merge, deep: true)
+	        } else {
+				.vrl_error = "geoip_parse_failed"
+	            log("Falha ao criar chave de enriquecimento dinâmico: " + err, level: "error")
+	        }
+	    }
+	}
+	.trace = push(array(.trace) ?? [], "geoip")
+    del(.tmp.ips_to_enrich)
+}

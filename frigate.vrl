@@ -1,0 +1,41 @@
+# /etc/vector/frigate.vrl
+
+# Tenta parsear com os dois padrões (App ou Access)
+parsed, err = parse_groks(.message, patterns: [
+    "%{FRIGATE_APP:frigate}", 
+    "%{FRIGATE_ACCESS:frigate}"
+], alias_sources: ["/etc/vector/aliases.json"])
+
+if err == null {
+    . = merge(., parsed)
+    
+    # --- Ajuste de Timestamp ---
+    # Prioriza o timestamp interno da aplicação se existir
+    if exists(.timestamp_app) {
+        ts, err_ts = parse_timestamp(.timestamp_app, "%Y-%m-%d %H:%M:%S")
+        if err_ts == null { .timestamp = ts }
+    } else if exists(.timestamp_http) {
+        ts, err_ts = parse_timestamp(.timestamp_http, "%d/%b/%Y:%H:%M:%S %z")
+        if err_ts == null { .timestamp = ts }
+    }
+
+    # --- Integração com seu Pipeline de Enriquecimento ---
+    
+    # 1. Prepara para User Agent (ua_enrich.vrl espera .http_user_agent ou .user.agent)
+    if exists(.user_agent) {
+        .http_user_agent = .user_agent
+    }
+
+    # 2. Prepara para GeoIP (seu geoip.vrl ou filterlog usam source_details/ips_to_enrich)
+    if exists(.client_ip) {
+        .source_ip = .client_ip
+        
+        # Adiciona à fila de enriquecimento que criamos anteriormente
+        .tmp.ips_to_enrich = push(array(.tmp.ips_to_enrich) ?? [], {"ip": .client_ip, "target": "source_details"})
+    }
+
+    # Remove lixo
+    del(.frigate)
+}
+
+.trace = push(array(.trace) ?? [], "frigate")

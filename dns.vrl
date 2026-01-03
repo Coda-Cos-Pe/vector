@@ -1,0 +1,46 @@
+parsed_prefix, err = parse_grok(.message, "\\[%{INT:process.pid}:%{INT:process.thread}\\] %{LOGLEVEL:log.level}: %{DATA:process}: %{GREEDYDATA:kv_data}")
+
+if err == null {
+  . = merge(., parsed_prefix)
+
+  parsed_kvp, err_kvp = parse_key_value(.kv_data)
+  
+  if err_kvp == null {
+    . = merge(., parsed_kvp, deep: true)
+    
+    del(.kv_data)
+   
+    .source_port, err = to_int(.source_port)
+    if err != null {
+      log("Falha ao parsear KVP do dns-log: " + err_kvp, level: "warn")
+      .vrl_error = "dns_kvp_parse_failed"
+    }
+    .ttl,err = to_int(.ttl)
+    if err != null {
+      log("Falha ao parsear KVP do dns-log: " + err_kvp, level: "warn")
+      .vrl_error = "dns_kvp_parse_failed"
+    }
+   
+
+	# --- INÍCIO DA MODIFICAÇÃO ---
+    # Inicializa o array de enriquecimento temporário
+    .tmp.ips_to_enrich = []
+
+    # Adiciona os IPs do DNS à fila de enriquecimento
+    if is_string(.source_ip) {
+        # Usamos 'source_details' para não colidir com o objeto '.source' do Squid
+        .tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .source_ip, "target": "source"})
+    }
+    if is_string(.answer) {
+        .tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .answer, "target": "answer"})
+    }
+    # --- FIM DA MODIFICAÇÃO ---
+	.trace = push(array(.trace) ?? [], "dns")
+  } else {
+    log("Falha ao parsear KVP do dns-log: " + err_kvp, level: "warn")
+    .vrl_error = "dns_kvp_parse_failed"
+  }
+} else {
+  log("Falha ao parsear prefixo do dns-log: " + err, level: "warn")
+  .vrl_error = "dns_prefix_parse_failed"
+}

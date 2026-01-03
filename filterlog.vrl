@@ -1,0 +1,89 @@
+# /etc/vector/filterlog.vrl
+
+fields = parse_csv(.message) ?? []
+
+if length(fields) > 10 {
+    .rule_nr = fields[0]
+    .tracker_id = fields[3]
+    .interface = fields[4]
+    .reason = fields[5]
+    .action = fields[6]
+    .direction = fields[7]
+    .ip_version = fields[8]
+
+    # --- Lógica IPv4 ---
+    if .ip_version == "4" {
+        .proto_name = fields[16]
+        .src_ip = fields[18]
+        .dst_ip = fields[19]
+        .dst_port = fields[21]
+        
+    } else if .ip_version == "6" { 
+        # --- Lógica IPv6 ---
+        .proto_name = fields[12]
+        .src_ip = fields[15]
+        .dst_ip = fields[16]
+
+        # Verifica se tem portas (TCP/UDP) ou se é dados (ICMP)
+        if .proto_name == "tcp" || .proto_name == "udp" {
+            .src_port = fields[17]
+            .dst_port = fields[18]
+            .data_length = fields[19]
+        } else {
+            .data = fields[17]
+        }
+    }
+
+    # ---------------------------------------------------------
+    # 🌍 PREPARAÇÃO PARA ENRIQUECIMENTO GEOIP
+    # ---------------------------------------------------------
+    
+    # Inicializa o array
+    .tmp.ips_to_enrich = []
+
+    # Adiciona IP de Origem
+    if is_string(.src_ip) {
+        .tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .src_ip, "target": "source"})
+    }
+
+    # Adiciona IP de Destino
+    if is_string(.dst_ip) {
+        .tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .dst_ip, "target": "destination"})
+    }
+}
+
+if exists(.dst_port) && exists(.proto_name) {
+    s_port = to_string(.dst_port) ?? ""
+
+    # CORREÇÃO AQUI: Capturamos o 'err' caso downcase falhe
+    s_proto, err = downcase(.proto_name)
+
+    # Só continuamos se não houve erro na conversão
+    if err == null {
+        svc, err_table = get_enrichment_table_record("service_names", {
+            "port": s_port,
+            "proto": s_proto
+        })
+
+        if err_table == null {
+            .service_name = svc.service
+        }
+    }
+}
+
+if exists(.tracker_id) {
+    # Garante que seja string (embora do CSV já venha como string)
+    tid = to_string(.tracker_id) ?? ""
+
+    # Consulta a tabela carregada no vector.yaml
+    rule_rec, err = get_enrichment_table_record("firewall_rules", { "tracker_id": tid })
+
+    if err == null {
+        .rule_description = rule_rec.rule_description
+    } else {
+        # Opcional: Se não achar, pode deixar null ou colocar "Unknown"
+        .rule_description = "Unknown Rule (" + tid + ")"
+    }
+}
+
+.trace = push(array(.trace) ?? [], "flog")

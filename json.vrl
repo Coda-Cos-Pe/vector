@@ -1,0 +1,16 @@
+if is_string(.message) {
+  parsed_json, err = parse_json(.message)
+
+  if err == null && is_object(parsed_json) {
+   	.app = parsed_json 
+  }
+  if exists(parsed_json.application_name){
+  	.app_name = parsed_json.application_name
+  }
+  .trace = push(array(.trace) ?? [], "json")
+  .tmp.ips_to_enrich = []
+
+  if is_string(.app.ipaddr) {
+  	.tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .app.ipaddr, "target": "app"})
+  }
+}

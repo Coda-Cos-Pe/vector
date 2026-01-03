@@ -1,0 +1,265 @@
+data_dir: "/var/lib/vector"
+
+api:
+  enabled: true
+
+sources:
+  vector_agents:
+    type: "vector"
+    address: "0.0.0.0:9000"
+    version: "2"
+  
+  beats_logstash:
+    type: logstash #
+    address: "0.0.0.0:5044"
+
+  gelf_socket:
+    type: socket #
+    mode: udp
+    address: "0.0.0.0:12201"
+    decoding:
+      codec: gelf #
+
+  syslog_opnsense:
+    type: syslog
+    address: "0.0.0.0:5454"
+    mode: udp
+    decoding:
+      codec: string
+
+  syslog:
+    type: syslog
+    address: "0.0.0.0:514"
+    mode: udp
+    decoding:
+      codec: string
+
+  syslog_routers:
+    type: syslog
+    address: "0.0.0.0:5555"
+    mode: udp
+    decoding:
+      codec: string
+
+enrichment_tables:
+  geoip_city_db:
+    type: mmdb
+    path: "/etc/vector/GeoLite2-City.mmdb"
+
+  geoip_asn_db:
+    type: mmdb
+    path: "/etc/vector/GeoLite2-ASN.mmdb"
+
+  mac_vendors:
+    type: "file"
+    file:
+      path: "/etc/vector/oui.csv"
+      encoding:
+        type: "csv"
+    schema:
+      prefix: "string"
+      manufacturer: "string"
+
+  service_names:
+    type: "file"
+    file:
+      path: "/etc/vector/ports.csv"
+      encoding:
+        type: "csv"
+    schema:
+      port: "string"
+      proto: "string"
+      service: "string"
+
+  syslog_levels:
+    type: "file"
+    file:
+      path: "/etc/vector/syslog_levels.csv"
+      encoding:
+        type: "csv"
+    schema:
+      severity: "string" # O Vector lê CSV como string por padrão
+      severity_name: "string"
+
+  firewall_rules:
+    type: "file"
+    file:
+      path: "/etc/vector/firewall_rules.csv"
+      encoding:
+        type: "csv"
+    schema:
+      tracker_id: "string"
+      rule_description: "string"
+
+transforms:
+  log_all:
+    type: remap
+    inputs:
+      - vector_agents
+      - beats_logstash
+      - gelf_socket
+      - syslog_opnsense
+      - syslog_routers
+      - syslog
+    source: |
+      .trace = push(array(.trace) ?? [], "all")
+      if !exists(.remote_ip){
+        if exists(.source_ip){
+          .remote_ip = .source_ip
+        }
+      }
+
+  passthrough:
+    type: route
+    reroute_unmatched: true
+    inputs:
+      - log_all    
+    route:
+      squid:
+        type: "vrl"
+        source: |
+          .appname == "(squid-1)"
+      
+      dns_log:
+        type: "vrl"
+        source: |
+          msg = to_string(.message) ?? "default"
+          is_string(.message) && contains(msg, "dns-log:")
+
+      dhcpd:
+        type: "vrl"
+        source: |
+          .appname == "dhcpd"
+
+      filterlog:
+        type: "vrl"
+        source: |
+          .appname == "filterlog"
+      
+      frigate: 
+        type: "vrl"
+        source: |
+          .container_name == "frigate"
+
+  process_squid:
+    type: remap
+    inputs:
+      - passthrough.squid
+    file: "/etc/vector/squid.vrl"
+
+  process_dns_log:
+    type: remap
+    inputs:
+      - passthrough.dns_log
+    file: "/etc/vector/dns.vrl"
+
+  process_dhcpd:
+    type: remap
+    inputs:
+      - passthrough.dhcpd
+    file: "/etc/vector/dhcpd.vrl"
+
+  process_filterlog:
+    type: remap
+    inputs:
+      - passthrough.filterlog
+    file: "/etc/vector/filterlog.vrl"
+
+  process_json_message:
+    type: remap
+    inputs:
+      - passthrough._unmatched
+    file: "/etc/vector/json.vrl"    
+
+  process_frigate:
+    type: remap
+    inputs:
+      - passthrough.frigate
+    file: "/etc/vector/frigate.vrl"
+
+  enrich_geoip:
+    type: remap
+    inputs:
+      - process_squid
+      - process_dns_log
+      - process_filterlog
+      - process_json_message
+      - process_dhcpd
+      - process_frigate
+    file: "/etc/vector/geoip.vrl"
+
+  enrich_ua:
+    type: remap
+    inputs:
+      - enrich_geoip 
+    file: "/etc/vector/ua_enrich.vrl"
+
+  enrich_mac:
+    type: remap
+    inputs:
+      - enrich_ua
+    file: "/etc/vector/mac_enrich.vrl"
+
+  global_cleanup:
+    type: remap
+    inputs:
+      - enrich_mac
+    source: |
+      # Lógica global de renomeação (do seu VRL original)
+      .trace = push(array(.trace) ?? [], "out")
+      if exists(.appname) {
+        .app_name = del(.appname)
+      }
+
+      candidates = [.severity, .syslog.severity, .level]
+      valid_sevs = compact(candidates)
+
+      if length(valid_sevs) > 0 {
+          # Pega o primeiro valor encontrado
+          sev_val = valid_sevs[0]
+
+          # Converte para string para buscar no CSV
+          s_sev = to_string(sev_val) ?? "6"
+
+          # Busca o nome legível
+          level_rec, err = get_enrichment_table_record("syslog_levels", {"severity": s_sev})
+
+          if err == null {
+              new_name = level_rec.severity_name
+
+              # 2. SUBSTITUIÇÃO (REPLACE)
+              # Se o campo existe, troca o número pelo nome
+
+              if exists(.severity) {
+                  .severity = new_name
+              }
+
+              if exists(.level) {
+                  .level = new_name
+              }
+
+              if exists(.syslog.severity) {
+                  .syslog.severity = new_name
+              }
+          }
+      }
+
+
+sinks:
+  victoria_logs:
+    inputs:
+      - global_cleanup
+    type: http
+    #uri: http://logs.example.com:9428/insert/jsonline?_stream_fields=hostname,app_name,remote_ip&_msg_field=message&_time_field=timestamp&debug=1
+    uri: http://logs.example.com:9428/insert/jsonline?_stream_fields=hostname,app_name,remote_ip&_msg_field=message&_time_field=timestamp
+    compression: gzip
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    healthcheck:
+      enabled: false
+    buffer:
+      type: disk
+      max_size: 1073741824 # 10 GiB
+      when_full: block

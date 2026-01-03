@@ -1,0 +1,2 @@
+0       3       1       *       *       /etc/vector/scripts/macaddr.sh >> /var/log/vector_macaddr_update.log 2>&1
+*/5     *       *       *       *       /etc/vector/scripts/fwrules.sh >> /var/log/vector_rules_update.log 2>&1

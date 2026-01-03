@@ -1,0 +1,59 @@
+# /etc/vector/ua_enrich.vrl
+
+candidates = [ .http.request.ua, .http_user_agent, .user.agent ]
+valid_uas = compact(candidates)
+
+if length(valid_uas) > 0 {
+    raw_ua = valid_uas[0]
+    parsed, err = parse_user_agent(raw_ua, mode: "enriched")
+
+    if err == null {
+        # Define padrão inicial
+        parsed.device.category = "other"
+
+        # --- 1. Extração Segura de Strings (Para evitar erros de tipo) ---
+        
+        # OS Family
+        os_fam = "Unknown"
+        if parsed.os.family != null { 
+            os_fam = string!(parsed.os.family) 
+        }
+
+        # Device Family (Ex: Spider)
+        dev_fam = "Unknown"
+        if parsed.device.family != null { 
+            dev_fam = string!(parsed.device.family) 
+        }
+
+        # Browser Family (Ex: Robot/Googlebot)
+        br_fam = "Unknown"
+        if parsed.browser.family != null { 
+            br_fam = string!(parsed.browser.family) 
+        }
+
+        log("DEBUG UA -> OS: " + os_fam + " | Dev: " + dev_fam, level: "info")
+
+        # --- 2. Lógica de Classificação ---
+
+        # Aqui usamos as variáveis 'dev_fam' e 'br_fam' que criamos acima
+        if dev_fam == "Spider" || br_fam == "Robot" {
+            parsed.device.category = "bot"
+
+        } else if match(os_fam, r'(?i)(Android|iOS|Windows Phone)') {
+            parsed.device.category = "smartphone"
+
+        } else if match(os_fam, r'(?i)(Windows|Linux|Mac|Ubuntu|Debian|Fedora)') {
+            parsed.device.category = "desktop"
+        }
+
+        # --- 3. Atribuição Final ---
+        # CORREÇÃO: Sem chaves { }, atribuição direta do objeto
+        .user.agent = parsed
+
+    } else {
+        log("Falha ao parsear user agent: " + err, level: "warn")
+        .vrl_error = "user_agent_failed"
+    }
+}
+
+.trace = push(array(.trace) ?? [], "ua_enrich")

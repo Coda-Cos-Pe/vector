@@ -1,0 +1,27 @@
+parsed, err = parse_groks(.message, patterns: [
+  "%{DHCPD_ICMP:dhcpd}",
+  "%{DHCPD_DB_UPDATE:dhcpd}",
+  "%{DHCPD_DECLINE:dhcpd}",
+  "%{DHCPD_DISCOVER:dhcpd}",
+  "%{DHCPD_DUPLICATE:dhcpd}",
+  "%{DHCPD_INFORM:dhcpd}",
+  "%{DHCPD_LEASE:dhcpd}",
+  "%{DHCPD_OFFER_ACK:dhcpd}",
+  "%{DHCPD_RELEASE:dhcpd}",
+  "%{DHCPD_REQUEST:dhcpd}",
+  "%{DHCPD_REUSE:dhcpd}",
+  "%{DHCPv6_ACTION:dhcpd}",
+  "%{DHCPv6_REPLY:dhcpd}",
+  "%{DHCPv6_REUSE:dhcpd}"
+], alias_sources: ["/etc/vector/aliases.json"])
+
+if err == null {
+  . = merge(., parsed)
+  if exists(.dhcpd){
+  	.message = del(.dhcpd)
+  }
+} else {
+  log("Falha ao parsear DHCPD" + err, level: "warn")
+  .vrl_error = "dhcpd_parse_failed"
+}
+.trace = push(array(.trace) ?? [], "dhcpd")

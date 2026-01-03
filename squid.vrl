@@ -1,0 +1,38 @@
+
+if is_string(.message) {
+  parsed_message, err = parse_json(.message)
+  if err == null && is_object(parsed_message) {
+    . = merge(., parsed_message) ?? .
+    del(.message)
+    parsed_ts, err_ts = parse_timestamp(del(.@timestamp), "%Y-%m-%dT%H:%M:%S%z")
+    if err_ts == null {
+      .timestamp = parsed_ts
+    } else {
+      del(.@timestamp)
+      log("Falha ao parsear @timestamp do Squid: " + err_ts, level: "warn")
+    }
+#    if is_object(.host) && exists(.host.name) {
+#      .hostname = del(.host.name)
+#    }
+    .message = .acl.log
+    .remote_ip = .source.ip
+
+    .tmp.ips_to_enrich = []
+
+    if is_string(.source.ip) {
+        .tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .source.ip, "target": "source"})
+    }
+    if is_string(.destination.ip) {
+        .tmp.ips_to_enrich = push(.tmp.ips_to_enrich, {"ip": .destination.ip, "target": "destination"})
+    }
+    # --- FIM DA MODIFICAÇÃO ---
+
+
+  } else {
+    log("Falha ao parsear JSON aninhado do Squid: " + to_string(err), level: "warn")
+    .vrl_error = "squid_json_parse_failed"
+  }
+  .remote_ip = .source_ip
+  .app_name = del(.appname)
+  .trace = push(array(.trace) ?? [], "squid")
+}

@@ -1,0 +1,31 @@
+# --- Lógica Genérica de Enriquecimento de MAC ---
+
+# 1. Cria um array com todos os possíveis campos de MAC
+candidates = [.dhcpv4_client_mac, .source_mac, .mac_address, .source.macaddr, .destination.macaddr]
+
+# 2. Remove os valores 'null' do array usando 'compact'
+valid_macs = compact(candidates)
+
+# 3. Se a lista de MACs válidos não estiver vazia, pegamos o primeiro (índice 0)
+if length(valid_macs) > 0 {
+    target_mac = valid_macs[0]
+
+    # 4. Pega os primeiros 8 caracteres (OUI)
+    oui, err = slice(target_mac, 0, 8)
+
+    if err == null {
+        # 5. Consulta a tabela carregada no vector.yaml
+        record, err_table = get_enrichment_table_record("mac_vendors", { "prefix": oui })
+
+        if err_table == null {
+            .mac_manufacturer = record.manufacturer
+        } else {
+            .mac_manufacturer = "Unknown" 
+        }
+    } else {
+		.vrl_error = "macaddr_parse_failed"
+	}
+}
+
+# Adiciona ao trace
+.trace = push(array(.trace) ?? [], "mac_enrich")

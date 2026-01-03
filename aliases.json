@@ -1,0 +1,19 @@
+{
+  "FRIGATE_APP": "^%{TIMESTAMP_ISO8601:timestamp_precise}\\s+\\[%{DATA:timestamp_app}\\]\\s+%{NOTSPACE:logger}\\s+%{LOGLEVEL:level}\\s+:\\s+%{GREEDYDATA:message}",
+  "FRIGATE_ACCESS": "^%{TIMESTAMP_ISO8601:timestamp_precise}\\s+%{IP:client_ip}\\s+-\\s+-\\s+\\[%{HTTPDATE:timestamp_http}\\]\\s+\"%{WORD:method}\\s+%{NOTSPACE:request_path}\\s+HTTP/%{NUMBER:http_version}\"\\s+%{NUMBER:status}\\s+%{NUMBER:bytes}\\s+\"%{DATA:referer}\"\\s+\"%{DATA:user_agent}\"(?:.*)?",
+  "NETWORK": "%{IP}/%{NUMBER}",
+  "DHCPD_DB_UPDATE": "Wrote %{INT:dhcp_db_count} %{DATA:dhcp_db_object} to leases file\\.",
+  "DHCPD_ICMP": "(?:(?<dhcp_icmp_type>unexpected) )?(?<dhcp_operation>ICMP) Echo Reply (?:for|from) %{IP:dhcpv4_icmp_ip}(?: %{GREEDYDATA:dhcpv4_message})?",
+  "DHCPD_DECLINE": "DHCP(?<dhcp_operation>DECLINE) of %{IP:dhcpv4_client_ip} from %{MAC:dhcpv4_client_mac}( \\(%{DATA:dhcpv4_option_hostname}\\))?(?: via (?:%{IP:dhcpv4_relay_ip}|(?<interface_name>[^: ]+)))?",
+  "DHCPD_DISCOVER": "DHCP(?<dhcp_operation>DISCOVER) from %{MAC:dhcpv4_client_mac}( \\(%{DATA:dhcpv4_option_hostname}\\))?(?: via (?:%{IP:dhcpv4_relay_ip}|(?<interface_name>[^: ]+)))(?:(?:\\: network %{NETWORK:network}\\: )%{GREEDYDATA:dhcpv4_message})?",
+  "DHCPD_DUPLICATE": "uid %{WORD:dhcp_operation} %{IP:dhcpv4_client_ip} for client %{MAC:dhcpv4_client_mac} is %{WORD:dhcp_error_code} on %{GREEDYDATA:dhcpv4_client_address}",
+  "DHCPD_INFORM": "DHCP(?<dhcp_operation>INFORM) from %{IP:dhcpv4_client_ip}?(?: via (?:%{IP:dhcpv4_relay_ip}|(?<interface_name>[^: ]+)))?",
+  "DHCPD_LEASE": "DHCP(?<dhcp_operation>LEASE(QUERY|UNKNOWN|ACTIVE|UNASSIGNED)) (from|to) %{IP:dhcpv4_client_ip} for (IP %{IP:dhcpv4_query_ip}|client-id %{NOTSPACE:dhcpv4_query_id}|MAC address %{MAC:dhcpv4_query_mac})( \\(%{NUMBER:dhcpv4_query_associated} associated IPs\\))?",
+  "DHCPD_OFFER_ACK": "DHCP(?<dhcp_operation>OFFER|N?ACK|NAK) (?:on|to) %{IP:dhcpv4_client_ip} (?:to |\\(?)(?:%{MAC:dhcpv4_client_mac})(?:\\))?(?: \\(%{DATA:dhcpv4_option_hostname}\\))?(?: via (?:%{IP:dhcpv4_relay_ip}|(?<interface_name>[^: ]+)))?",
+  "DHCPD_RELEASE": "DHCP(?<dhcp_operation>RELEASE) of %{IP:dhcpv4_client_ip} from %{MAC:dhcpv4_client_mac}( \\(%{DATA:dhcpv4_option_hostname}\\))?(?: via (?:%{IP:dhcpv4_relay_ip}|(?<interface_name>[^: ]+)))? \\((?<dhcpd_release>(not )?found)\\)",
+  "DHCPD_REQUEST": "DHCP(?<dhcp_operation>REQUEST) for %{IP:dhcpv4_client_ip}( \\(%{DATA:dhcpv4_server_ip}\\))? from %{MAC:dhcpv4_client_mac}( \\(%{DATA:dhcpv4_option_hostname}\\))?(?: via (?:%{IP:dhcpv4_relay_ip}|(?<interface_name>[^: ]+)))?(?:\\: %{GREEDYDATA:dhcpv4_message})?",
+  "DHCPD_REUSE": "(?<dhcp_operation>reuse_lease): lease age %{INT:dhcpv4_lease_duration}.* lease for %{IPV4:dhcpv4_client_ip}",
+  "DHCPv6_ACTION": "(?<dhcpv6_operation>Request|Picking|Sending Reply|Sending Advertise|Confirm|Solicit|Renew)(\\s)?(message)?(\\s)?(to|from)?(\\s)?(pool address)? %{IP:dhcpv6_client_ip}(\\s)?(port %{INT:dhcpv6_client_port})?(, transaction ID %{BASE16FLOAT:dhcpv6_transaction_id})?",
+  "DHCPv6_REPLY": "(?<dhcpv6_operation>Advertise|Reply) NA: address %{IP:dhcpv6_client_ip} to client with duid %{GREEDYDATA:dhcpv6_duid}\\siaid\\s\\=\\s%{INT:dhcpv6_iaid} valid for %{INT:dhcpv6_lease_duration} seconds",
+  "DHCPv6_REUSE": "(?<dhcpv6_operation>Reusing lease) for: %{IPV6:dhcpv6_client_ip}, age %{INT:dhcpv6_lease_age_length}.*preferred: %{INT:dhcpv6_lease_age_preferred}, valid %{INT:dhcpv6_lease_age_valid}"
+}
